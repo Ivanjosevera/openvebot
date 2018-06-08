@@ -5,10 +5,12 @@
 from uuid import uuid4
 
 import re
+import random
 import requests
+import sys
 from bs4 import BeautifulSoup
 
-from telegram import InlineQueryResultArticle, ParseMode, \
+from telegram import InlineQueryResultArticle, ParseMode, InlineKeyboardMarkup, InlineKeyboardButton, \
     InputTextMessageContent
 from telegram.ext import Updater, InlineQueryHandler, CommandHandler
 import logging
@@ -20,16 +22,18 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Token obtenido de @botfather en Telegram
-TOKEN = "TOKEN_BOT_FATHER"
+TOKEN = sys.argv[1] # Let it die token needs to be specified.
 
 # Define a few command handlers. These usually take the two arguments bot and
 # update. Error handlers also receive the raised TelegramError object in error.
 def start(bot, update):
-    update.message.reply_text('Hi!')
+    update.message.reply_text(
+        'Hola! soy un bot que permite buscar entre los grupos que se encuentran '+
+        'en la OpenVe, para usarme solo debes escribir en cualquier chat @OpenVebot y colocar el nombre del grupo a buscar.')
 
 
 def help(bot, update):
-    update.message.reply_text('Help!')
+    update.message.reply_text('Si tienes problemas con el bot, contacta con @alexr1712 mi creador! o al equipo de openve via https://t.me/openve')
 
 
 def escape_markdown(text):
@@ -43,28 +47,46 @@ def inlinequery(bot, update):
     soup = BeautifulSoup(r.text, "html.parser")
     results = list()
     query = update.inline_query.query
-    for tr in soup.find_all('tr')[2:]:
-        tds = tr.find_all('td')
-        if tds:
-            if len(query) == 0:
-                results.append(InlineQueryResultArticle(
-                                                id=uuid4(),
-                                                title=escape_markdown(tds[0].text),
-                                                input_message_content=InputTextMessageContent(
-                                                    "Nombre: {}\nLink: {} \nAdmins: {}".format(escape_markdown(tds[0].text),tds[2].text,tds[1].text)),
-                                                url=tds[2].text))
-
-            elif query.lower() in (tds[0].text).lower():
-                results.append(InlineQueryResultArticle(
-                                                id=uuid4(),
-                                                title=tds[0].text,
-                                                input_message_content=InputTextMessageContent(
-                                                    "Nombre: {}\nLink: {} \nAdmins: {}".format(escape_markdown(tds[0].text),tds[2].text,tds[1].text)),
-                                                url=tds[2].text))
-        else:
+    communities = soup.find_all('tr')[2:]
+    if len(query) == 0:
+        random.shuffle(communities)
+        for tr in communities[:50]:
+            td = tr.find_all('td')
             results.append(InlineQueryResultArticle(
-                         id=uuid4(), 
-                         title='No existen items'))
+                id=uuid4(),
+                title=escape_markdown(td[0].text),
+                input_message_content=InputTextMessageContent(
+                    "Nombre: {}\nLink: {} \nAdmins: {}".format(escape_markdown(td[0].text),td[2].text,td[1].text)),
+                url=td[2].text,
+                reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton('▶️  Ir al Grupo ◀️', url=td[2].text)],
+                            [InlineKeyboardButton('🔎 Encontrar Grupos', switch_inline_query_current_chat="")]
+                        ])))
+    
+    elif len(query) > 0:
+            found = 0
+            for tr in communities:
+                tds = tr.find_all('td')
+                if query.lower() in (tds[0].text).lower():
+                    found+=1
+                    results.append(InlineQueryResultArticle(
+                        id=uuid4(),
+                        title=tds[0].text,
+                        input_message_content=InputTextMessageContent(
+                        "Nombre: {}\nLink: {} \nAdmins: {}".format(escape_markdown(tds[0].text),tds[2].text,tds[1].text)),
+                        url=tds[2].text,
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton('▶️  Ir al Grupo ◀️', url=tds[2].text)],
+                            [InlineKeyboardButton('🔎 Encontrar Grupos', switch_inline_query_current_chat="")]
+                        ])))
+            if found == 0:
+                results.append(InlineQueryResultArticle(
+                    id=uuid4(), 
+                    title='No existen items con ese termino'))
+    else:
+        results.append(InlineQueryResultArticle(
+            id=uuid4(), 
+            title='No existen items'))
     update.inline_query.answer(results)
 
 
